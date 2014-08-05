@@ -52,9 +52,9 @@ Methods
 
 
 `` mode(mode=None)``  
-Returns current mode and sets it to ``mode`` if argument is passed.
-``'wake'``: wakes the device
-``'sleep'``: sets the device to sleep mode
+Returns current mode and sets it to ``mode`` if argument is passed.  
+``'wake'``: wakes the device  
+``'sleep'``: sets the device to sleep mode  
 
 ``sample_rate(rate=None)``  
 Returns the current sample rate and sets it to ``rate`` if argument is passed.
@@ -62,36 +62,36 @@ Any int can be passed, but not all rates are possible. Check the return value to
 what has been set.
 
 ``accel_range(accel_range=None)``  
-Returns the current accel range and sets it to ``accel_range`` if argument is passed.
+Returns the current accel range and sets it to ``accel_range`` if argument is passed.  
 ``accel_range`` can be 0, 1, 2 or 3.
 
 `gyro_range(gyro_range=None)``  
-Returns the current gyro range and sets it to ``gyro_range`` if argument is passed.
+Returns the current gyro range and sets it to ``gyro_range`` if argument is passed.  
 ``gyro_range`` can be 0, 1, 2 or 3.
 
 ``get_accel(xyz=None)``  
 Returns a list of accelerations in the specified directions in g. Pass a sting containing
-the axis you want to get.
-i.E.:   ``'xyz'`` returns ``[ax, ay, az]``
-        ``'x'``   returns ``[ax]``
-        ``'xz'``  returns ``[ax,az]``
-        ``None``  defaults to ``'xyz'``
+the axis you want to get.  
+i.E.:   ``'xyz'`` returns ``[ax, ay, az]``  
+        ``'x'``   returns ``[ax]``  
+        ``'xz'``  returns ``[ax,az]``  
+        ``None``  defaults to ``'xyz'``  
 
 ``get_gyro(xyz=None)``  
 Returns a list of trun rates in the specified directions in deg/s. Pass a sting containing
-the axis you want to get.
-i.E.:   ``'xyz'`` returns ``[gx, gy, gz]``
-        ``'x'``   returns ``[gx]``
-        ``'xz'``  returns ``[gx,gz]``
-        ``None``  defaults to ``'xyz'``
+the axis you want to get.  
+i.E.:   ``'xyz'`` returns ``[gx, gy, gz]``  
+        ``'x'``   returns ``[gx]``  
+        ``'xz'``  returns ``[gx,gz]``  
+        ``None``  defaults to ``'xyz'``  
 
 ``get_mag(xyz=None)``  
 Returns a list of the magnetic fields in the specified directions in uT. Pass a sting containing
-the axis you want to get.
-i.E.:   ``'xyz'`` returns ``[mx, my, mz]``
-        ``'x'``   returns ``[mx]``
-        ``'xz'``  returns ``[mx,mz]``
-        ``None``  defaults to ``'xyz'``
+the axis you want to get.  
+i.E.:   ``'xyz'`` returns ``[mx, my, mz]``  
+        ``'x'``   returns ``[mx]``  
+        ``'xz'``  returns ``[mx,mz]``  
+        ``None``  defaults to ``'xyz'``  
 
 ``get_temperature()``  
 Returns the temperature in degrees C.
