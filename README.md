@@ -3,7 +3,6 @@ Module mpu9150
 mpu9150 is a micropython module for the InvenSense MPU9150 sensor.
 It measures acceleration, turn rate and the magnetic field in three axis.  
 Breakoutboard: http://www.adafruit.com/products/1603  
-data-sheet: http://ae-bst.resource.bosch.com/media/products/dokumente/bmp180/BST-BMP180-DS000-09.pdf
 
 If you have any questions, open an issue.
 
