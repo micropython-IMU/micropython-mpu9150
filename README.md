@@ -72,26 +72,26 @@ Returns the current gyro range and sets it to ``gyro_range`` if argument is pass
 ``get_accel(xyz=None)``  
 Returns a list of accelerations in the specified directions in g. Pass a sting containing
 the axis you want to get.  
-i.E.:   ``'xyz'`` returns ``[ax, ay, az]``  
-        ``'x'``   returns ``[ax]``  
-        ``'xz'``  returns ``[ax,az]``  
-        ``None``  defaults to ``'xyz'``  
+``'xyz'`` returns ``[ax, ay, az]``  
+``'x'``   returns ``[ax]``  
+``'xz'``  returns ``[ax,az]``  
+``None``  defaults to ``'xyz'``  
 
 ``get_gyro(xyz=None)``  
 Returns a list of trun rates in the specified directions in deg/s. Pass a sting containing
 the axis you want to get.  
-i.E.:   ``'xyz'`` returns ``[gx, gy, gz]``  
-        ``'x'``   returns ``[gx]``  
-        ``'xz'``  returns ``[gx,gz]``  
-        ``None``  defaults to ``'xyz'``  
+``'xyz'`` returns ``[gx, gy, gz]``  
+``'x'``   returns ``[gx]``  
+``'xz'``  returns ``[gx,gz]``  
+``None``  defaults to ``'xyz'``  
 
 ``get_mag(xyz=None)``  
 Returns a list of the magnetic fields in the specified directions in uT. Pass a sting containing
 the axis you want to get.  
-i.E.:   ``'xyz'`` returns ``[mx, my, mz]``  
-        ``'x'``   returns ``[mx]``  
-        ``'xz'``  returns ``[mx,mz]``  
-        ``None``  defaults to ``'xyz'``  
+``'xyz'`` returns ``[mx, my, mz]``  
+``'x'``   returns ``[mx]``  
+``'xz'``  returns ``[mx,mz]``  
+``None``  defaults to ``'xyz'``  
 
 ``get_temperature()``  
 Returns the temperature in degrees C.
