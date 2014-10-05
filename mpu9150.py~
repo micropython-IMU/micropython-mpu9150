@@ -60,7 +60,7 @@ class MPU9150():
         self.mag_addr = self._mag_addr
         self.chip_id = unp('>h', self._mpu_i2c.mem_read(1, self.mpu_addr, 0x75))[0]
 
-        # wake it up, set it up
+        # wake it up
         self.wake()
         self.passthrough(False)
         self.accel_range(3)

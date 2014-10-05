@@ -15,10 +15,6 @@ If you have any questions, open an issue.
 | GND    | GND    |
 | SCL    | SCL    |
 | SDA    | SDA    |
-| SCL    | ESC    |
-| SDA    | ESD    |
-
-Both the sensors SCL, SDA and ESC, ESD go to the same SDA, SCL on the pyboard.
 
 ### Quickstart
 
@@ -26,7 +22,7 @@ Example:
 ```python
 from mpu9150 import MPU9150
 imu = MPU9150()
-print(imu.mode('wake'))
+print(imu.wake())
 print(imu.sample_rate())
 print(imu.accel_range())
 print(imu.gyro_range())
@@ -35,8 +31,20 @@ ax, ay, az = imu.get_accel()
 gx, gy, gz = imu.get_gyro()
 mx, my, mz = imu.get_mag()
 print(temp, ax, gx, mx)
+
+print(imu.sample_rate(4000))
 print(imu.accel_range(3))
+print(imu.gyro_range(3))
+
 print(imu.get_accel('x'))
+print(imu.get_gyro('xy'))
+print(imu.get_mag('yz'))
+
+print(imu.get_accel_raw())
+print(imu.get_gyro_raw())
+print(imu.get_mag_raw())
+
+print(imu.sleep())
 ```
 
 Classes
@@ -50,10 +58,18 @@ Methods
 --------------
 
 
-`` mode(mode=None)``  
-Returns current mode and sets it to ``mode`` if argument is passed.  
-``'wake'``: wakes the device  
-``'sleep'``: sets the device to sleep mode  
+`` wake()``  
+wakes the device  
+
+``sleep()``
+sets the device to sleep mode  
+
+``passthrough()``
+sets passthrough mode 
+``True``: activates
+``False``: deactivates  
+If active, the magnetometer is passed through to the SDA, SCL pads. If you don't
+connect ESD and ESC, you have to activate passthrough to use the magnetometer.
 
 ``sample_rate(rate=None)``  
 Returns the current sample rate and sets it to ``rate`` if argument is passed.
