@@ -59,12 +59,15 @@ class MPU9150():
         self.mpu_addr = self._mpu_addr[no_of_dev-1]
         self.mag_addr = self._mag_addr
         self.chip_id = unp('>h', self._mpu_i2c.mem_read(1, self.mpu_addr, 0x75))[0]
+        self.timeout = 10
 
-        # wake it up, set it up
+        # wake it up
         self.wake()
         self.passthrough(False)
         self.accel_range(3)
+        self._ar = self.accel_range()
         self.gyro_range(3)
+        self._gr = self.gyro_range()
 
     # wake
     def wake(self):
@@ -147,6 +150,8 @@ class MPU9150():
             ari = int(unp('<H', self._mpu_i2c.mem_read(1, self.mpu_addr, 0x1C))[0]/8)
         except:
             ari = None
+        if ari is not None:
+            self._ar = ari
         return ari
 
     # gyroscope range
@@ -171,6 +176,8 @@ class MPU9150():
             gri = int(unp('<H', self._mpu_i2c.mem_read(1, self.mpu_addr, 0x1B))[0]/8)
         except:
             gri = None
+        if gri is not None:
+            self._gr = gri
         return gri
 
     # get raw temperature
@@ -179,7 +186,7 @@ class MPU9150():
         Returns the temperature in bytes.
         '''
         try:
-            t = self._mpu_i2c.mem_read(2, self.mpu_addr, 0x41)
+            t = self._mpu_i2c.mem_read(2, self.mpu_addr, 0x41, timeout=self.timeout)
         except:
             t = b'\x00\x00'
         return t
@@ -197,7 +204,7 @@ class MPU9150():
         Returns the accelerations on xyz in bytes.
         '''
         try:
-            axyz = self._mpu_i2c.mem_read(6, self.mpu_addr, 0x3B)
+            axyz = self._mpu_i2c.mem_read(6, self.mpu_addr, 0x3B, timeout=self.timeout)
         except:
             axyz = b'\x00\x00\x00\x00\x00\x00'
         return axyz
@@ -211,11 +218,10 @@ class MPU9150():
         if xyz is None:
             xyz = 'xyz'
         scale = (16384, 8192, 4096, 2048)
-        ar = self.accel_range()
         raw = self.get_accel_raw()
-        axyz = {'x': unp('>h', raw[0:2])[0]/scale[ar],
-                'y': unp('>h', raw[2:4])[0]/scale[ar],
-                'z': unp('>h', raw[4:6])[0]/scale[ar]}
+        axyz = {'x': unp('>h', raw[0:2])[0]/scale[self._ar],
+                'y': unp('>h', raw[2:4])[0]/scale[self._ar],
+                'z': unp('>h', raw[4:6])[0]/scale[self._ar]}
 
         aout = []
         for char in xyz:
@@ -228,7 +234,7 @@ class MPU9150():
         Returns the turn rate on xyz in bytes.
         '''
         try:
-            gxyz = self._mpu_i2c.mem_read(6, self.mpu_addr, 0x43)
+            gxyz = self._mpu_i2c.mem_read(6, self.mpu_addr, 0x43, timeout=self.timeout)
         except:
             gxyz = b'\x00\x00\x00\x00\x00\x00'
         return gxyz
@@ -242,11 +248,10 @@ class MPU9150():
         if xyz is None:
             xyz = 'xyz'
         scale = (131, 65.5, 32.8, 16.4)
-        gr = self.gyro_range()
         raw = self.get_gyro_raw()
-        gxyz = {'x': unp('>h', raw[0:2])[0]/scale[gr],
-                'y': unp('>h', raw[2:4])[0]/scale[gr],
-                'z': unp('>h', raw[4:6])[0]/scale[gr]}
+        gxyz = {'x': unp('>h', raw[0:2])[0]/scale[self._gr],
+                'y': unp('>h', raw[2:4])[0]/scale[self._gr],
+                'z': unp('>h', raw[4:6])[0]/scale[self._gr]}
 
         gout = []
         for char in xyz:
@@ -260,9 +265,12 @@ class MPU9150():
         '''
         try:
             self._mpu_i2c.mem_write(0x01, self.mag_addr, 0x0A)
-            while self._mpu_i2c.mem_read(1, self.mag_addr, 0x02) != b'\x01':
+            while self._mpu_i2c.mem_read(1,
+                                         self.mag_addr,
+                                         0x02,
+                                         timeout=self.timeout) != b'\x01':
                 pass
-            mxyz = self._mpu_i2c.mem_read(6, self.mag_addr, 0x03)
+            mxyz = self._mpu_i2c.mem_read(6, self.mag_addr, 0x03, timeout=self.timeout)
         except:
             mxyz = b'\x00\x00\x00\x00\x00\x00'
         return mxyz
