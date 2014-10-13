@@ -66,7 +66,7 @@ sets the device to sleep mode
 
 ``passthrough()``
 sets passthrough mode 
-``True``: activates
+``True``: activates  
 ``False``: deactivates  
 If active, the magnetometer is passed through to the SDA, SCL pads. If you don't
 connect ESD and ESC, you have to activate passthrough to use the magnetometer.
