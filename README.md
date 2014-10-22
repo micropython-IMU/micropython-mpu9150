@@ -80,7 +80,7 @@ what has been set.
 Returns the current accel range and sets it to ``accel_range`` if argument is passed.  
 ``accel_range`` can be 0, 1, 2 or 3.
 
-`gyro_range(gyro_range=None)``  
+``gyro_range(gyro_range=None)``  
 Returns the current gyro range and sets it to ``gyro_range`` if argument is passed.  
 ``gyro_range`` can be 0, 1, 2 or 3.
 
