@@ -44,7 +44,7 @@ class MPU9150():
     _mag_addr = 12
 
     # init
-    def __init__(self, side_str=None, no_of_dev=None, disable_interrupts=True):
+    def __init__(self, side_str=None, no_of_dev=None, disable_interrupts=None):
 
         # choose which i2c port to use
         if side_str == 'X':
@@ -70,7 +70,13 @@ class MPU9150():
         self.chip_id = int(unp('>h', self._read(1, 0x75))[0])
 
         # now apply user setting for interrupts
-        self.disable_interrupts = disable_interrupts
+        if disable_interrupts is True:
+            self.disable_interrupts = True
+        elif disable_interrupts is False:
+            self.disable_interrupts = False
+        else:
+            print('pass either True or False, defaulting to True')
+            self.disable_interrupts = True
 
         # wake it up
         self.wake()
