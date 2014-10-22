@@ -122,3 +122,9 @@ I2C adress of the accelerometer and the gyroscope.
 
 ``mag_addr``  
 I2C adress of the magnetometer.
+
+``timeout``  
+Timeout for I2C operations.
+
+``disable_interrupts``  
+True or False, disables/enables interrupts. Disable to protect I2C operations.

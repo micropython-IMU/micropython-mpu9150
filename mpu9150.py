@@ -32,7 +32,7 @@ class MPU9150():
     '''
     Module for the MPU9150 9DOF IMU. Pass X or Y according to on which side the
     sensor is connected. Pass 1 for the first, 2 for the second connected sensor.
-    By default we disable interrupts while reading or writing to the device. This
+    By default interrupts are disabled while reading or writing to the device. This
     prevents occasional bus lockups in the presence of pin interrupts, at the cost
     of disabling interrupts for about 250uS.
     '''
@@ -44,9 +44,9 @@ class MPU9150():
     _mag_addr = 12
 
     # init
-    def __init__(self, side_str=None, no_of_dev=None, disable_interrupts = True):
+    def __init__(self, side_str=None, no_of_dev=None, disable_interrupts=True):
 
-        # choose wich i2c port to use
+        # choose which i2c port to use
         if side_str == 'X':
             side = 1
         elif side_str == 'Y':
@@ -60,18 +60,17 @@ class MPU9150():
             print('pass either 1 or 2, defaulting to 1')
             no_of_dev = 1
 
-        # Seems necessary to enable interrupts for first read, otherwise the
-        # board crashes if no device is present.
-        self.disable_interrupts = False
         self.timeout = 10
 
         # create i2c object
+        self.disable_interrupts = False
         self._mpu_i2c = pyb.I2C(side, pyb.I2C.MASTER)
-        self.mpu_addr = self._mpu_addr[no_of_dev-1]
+        self.mpu_addr = int(self._mpu_addr[no_of_dev-1])
         self.mag_addr = self._mag_addr
-        self.chip_id = unp('>h', self.read(1, 0x75))[0]
-        
-        self.disable_interrupts = disable_interrupts # Now apply user setting
+        self.chip_id = int(unp('>h', self._read(1, 0x75))[0])
+
+        # now apply user setting for interrupts
+        self.disable_interrupts = disable_interrupts
 
         # wake it up
         self.wake()
@@ -82,35 +81,37 @@ class MPU9150():
         self._gr = self.gyro_range()
 
 
-    # Read from device (default to mpu)
-    def read(self, count, memaddr, devaddr = None):
+    # read from device
+    def _read(self, count, memaddr, devaddr = None):
         '''
-        Perform a memory read, by default fro the mpu.
+        Perform a memory read.
         '''
-        if devaddr is None:
-            devaddr = self.mpu_addr
         irq_state = True
         if self.disable_interrupts:
             irq_state = pyb.disable_irq()
         try:
-            result = self._mpu_i2c.mem_read(count, devaddr, memaddr, timeout = self.timeout)
+            result = self._mpu_i2c.mem_read(count,
+                                            devaddr,
+                                            memaddr,
+                                            timeout=self.timeout)
         except:
             raise MPU9150_Exception("I2C Memory read failed")
         pyb.enable_irq(irq_state)
         return result
 
-    # Write to device
-    def write(self, data, memaddr, devaddr = None):
+    # write to device
+    def _write(self, data, memaddr, devaddr = None):
         '''
-        Perform a memory write, by default fro the mpu.
+        Perform a memory write.
         '''
-        if devaddr is None:
-            devaddr = self.mpu_addr
         irq_state = True
         if self.disable_interrupts:
             irq_state = pyb.disable_irq()
         try:
-            result = self._mpu_i2c.mem_write(data, devaddr, memaddr, timeout = self.timeout)
+            result = self._mpu_i2c.mem_write(data,
+                                             devaddr,
+                                             memaddr,
+                                             timeout=self.timeout)
         except:
             raise MPU9150_Exception("I2C Memory write failed")
         pyb.enable_irq(irq_state)
@@ -122,7 +123,7 @@ class MPU9150():
         Wakes the device.
         '''
         try:
-            self.write(0x01, 0x6B)
+            self._write(0x01, 0x6B, self.mpu_addr)
         except MPU9150_Exception as response:
             print(response)
         return 'awake'
@@ -133,7 +134,7 @@ class MPU9150():
         Sets the device to sleep mode.
         '''
         try:
-            self.write(0x40, 0x6B)
+            self._write(0x40, 0x6B, self.mpu_addr)
         except MPU9150_Exception as response:
             print(response)
         return 'asleep'
@@ -148,16 +149,16 @@ class MPU9150():
             if mode is None:
                 pass
             elif mode == True:
-                self.write(0x00, 0x37)
-                self.write(0x00, 0x6A)
+                self._write(0x00, 0x37, self.mpu_addr)
+                self._write(0x00, 0x6A, self.mpu_addr)
             elif mode == False:
-                self.write(0x02, 0x37)
-                self.write(0x00, 0x6A)
+                self._write(0x02, 0x37, self.mpu_addr)
+                self._write(0x00, 0x6A, self.mpu_addr)
             else:
                 print('pass either True or False')
 
             # get mode
-            if self.read(1, 0x37) == b'\x02':
+            if self._read(1, 0x37, self.mpu_addr) == b'\x02':
                 return False
             else:
                 return True
@@ -180,10 +181,10 @@ class MPU9150():
                 rate_div = int( gyro_rate/rate - 1 )
                 if rate_div > 255:
                     rate_div = 255
-                self.write(rate_div, 0x19)
+                self._write(rate_div, 0x19, self.mpu_addr)
 
             # get rate
-            rate = gyro_rate/(unp('<H', self.read(1, 0x19))[0]+1) 
+            rate = gyro_rate/(unp('<H', self._read(1, 0x19, self.mpu_addr))[0]+1)
         except MPU9150_Exception as response:
             print(response)
             rate = None
@@ -203,11 +204,11 @@ class MPU9150():
             else:
                 ar = (0x00, 0x08, 0x10, 0x18)
                 try:
-                    self.write(ar[accel_range], 0x1C)
+                    self._write(ar[accel_range], 0x1C, self.mpu_addr)
                 except IndexError:
                     print('accel_range can only be 0, 1, 2 or 3')
             # get range
-            ari = int(unp('<H', self.read(1, 0x1C))[0]/8)
+            ari = int(unp('<H', self._read(1, 0x1C, self.mpu_addr))[0]/8)
         except MPU9150_Exception as response:
             print(response)
             ari = None
@@ -229,11 +230,11 @@ class MPU9150():
             else:
                 gr = (0x00, 0x08, 0x10, 0x18)
                 try:
-                    self.write(gr[gyro_range], 0x1B)
+                    self._write(gr[gyro_range], 0x1B, self.mpu_addr)
                 except IndexError:
                     print('gyro_range can only be 0, 1, 2 or 3')
             # get range
-            gri = int(unp('<H', self.read(1, 0x1B))[0]/8)
+            gri = int(unp('<H', self._read(1, 0x1B, self.mpu_addr))[0]/8)
         except MPU9150_Exception as response:
             gri = None
             print(response)
@@ -248,7 +249,7 @@ class MPU9150():
         Returns the temperature in bytes.
         '''
         try:
-            t = self.read(2, 0x41)
+            t = self._read(2, 0x41, self.mpu_addr)
         except MPU9150_Exception as response:
             print(response)
             t = b'\x00\x00'
@@ -267,7 +268,7 @@ class MPU9150():
         Returns the accelerations on xyz in bytes.
         '''
         try:
-            axyz = self.read(6, 0x3B)
+            axyz = self._read(6, 0x3B, self.mpu_addr)
         except MPU9150_Exception as response:
             print(response)
             axyz = b'\x00\x00\x00\x00\x00\x00'
@@ -298,7 +299,7 @@ class MPU9150():
         Returns the turn rate on xyz in bytes.
         '''
         try:
-            gxyz = self.read(6, 0x43)
+            gxyz = self._read(6, 0x43, self.mpu_addr)
         except MPU9150_Exception as response:
             print(response)
             gxyz = b'\x00\x00\x00\x00\x00\x00'
@@ -329,10 +330,10 @@ class MPU9150():
         Returns the mag on xyz in bytes.
         '''
         try:
-            self.write(0x01, 0x0A, self.mag_addr)
-            while self.read(1, 0x02, self.mag_addr) != b'\x01':
+            self._write(0x01, 0x0A, self.mag_addr)
+            while self._read(1, 0x02, self.mag_addr) != b'\x01':
                 pass
-            mxyz = self.read(6, 0x03, self.mag_addr)
+            mxyz = self._read(6, 0x03, self.mag_addr)
         except MPU9150_Exception as response:
             print(response)
             mxyz = b'\x00\x00\x00\x00\x00\x00'
