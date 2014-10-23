@@ -67,7 +67,7 @@ class MPU9150():
         self._mpu_i2c = pyb.I2C(side, pyb.I2C.MASTER)
         self.mpu_addr = int(self._mpu_addr[no_of_dev-1])
         self.mag_addr = self._mag_addr
-        self.chip_id = int(unp('>h', self._read(1, 0x75))[0])
+        self.chip_id = int(unp('>h', self._read(1, 0x75, self.mpu_addr))[0])
 
         # now apply user setting for interrupts
         if disable_interrupts is True:
@@ -88,7 +88,7 @@ class MPU9150():
 
 
     # read from device
-    def _read(self, count, memaddr, devaddr = None):
+    def _read(self, count, memaddr, devaddr):
         '''
         Perform a memory read.
         '''
@@ -106,7 +106,7 @@ class MPU9150():
         return result
 
     # write to device
-    def _write(self, data, memaddr, devaddr = None):
+    def _write(self, data, memaddr, devaddr):
         '''
         Perform a memory write.
         '''
