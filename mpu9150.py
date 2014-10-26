@@ -20,13 +20,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 '''
+# 25 Oct 2014 includes magnetometer corrections and support for non-blocking read
+# Fixes to passthrough method.
 
 import pyb
 import os
 from struct import unpack as unp
-
-class MPU9150_Exception(Exception):
-    pass
 
 class MPU9150():
     '''
@@ -42,7 +41,7 @@ class MPU9150():
                             # connected, first on 104,
                             # second on 105
     _mag_addr = 12
-
+    _I2Cerror = "I2C communication failure"
     # init
     def __init__(self, side_str=None, no_of_dev=None, disable_interrupts=None):
 
@@ -60,6 +59,7 @@ class MPU9150():
             print('pass either 1 or 2, defaulting to 1')
             no_of_dev = 1
 
+        self.mag_ready = False # Magnetometer control: set by status check, read and cleared by get_mag_raw
         self.timeout = 10
 
         # create i2c object
@@ -80,46 +80,45 @@ class MPU9150():
 
         # wake it up
         self.wake()
-        self.passthrough(False)
+        self.passthrough(True) # Enable mag access from main I2C bus
+        self.mag_correction = (1.0, 1.0, 1.0)
+        try:
+            self.mag_correction = self._get_mag_corrections()
+        except OSError:
+            print(MPU9160._I2Cerror)
         self.accel_range(3)
         self._ar = self.accel_range()
         self.gyro_range(3)
         self._gr = self.gyro_range()
 
-
     # read from device
     def _read(self, count, memaddr, devaddr):
         '''
-        Perform a memory read.
+        Perform a memory read. Caller should trap OSError. Possible values of
+        error args[0]: errorno.ETIMEDOUT errno.EBUSY or errno.EIO
         '''
         irq_state = True
         if self.disable_interrupts:
             irq_state = pyb.disable_irq()
-        try:
-            result = self._mpu_i2c.mem_read(count,
-                                            devaddr,
-                                            memaddr,
-                                            timeout=self.timeout)
-        except:
-            raise MPU9150_Exception("I2C Memory read failed")
+        result = self._mpu_i2c.mem_read(count,
+                                        devaddr,
+                                        memaddr,
+                                        timeout=self.timeout)
         pyb.enable_irq(irq_state)
         return result
 
     # write to device
     def _write(self, data, memaddr, devaddr):
         '''
-        Perform a memory write.
+        Perform a memory write. Caller should trap OSError.
         '''
         irq_state = True
         if self.disable_interrupts:
             irq_state = pyb.disable_irq()
-        try:
-            result = self._mpu_i2c.mem_write(data,
-                                             devaddr,
-                                             memaddr,
-                                             timeout=self.timeout)
-        except:
-            raise MPU9150_Exception("I2C Memory write failed")
+        result = self._mpu_i2c.mem_write(data,
+                                         devaddr,
+                                         memaddr,
+                                         timeout=self.timeout)
         pyb.enable_irq(irq_state)
         return result
 
@@ -130,8 +129,8 @@ class MPU9150():
         '''
         try:
             self._write(0x01, 0x6B, self.mpu_addr)
-        except MPU9150_Exception as response:
-            print(response)
+        except OSError:
+            print(MPU9160._I2Cerror)
         return 'awake'
 
     # mode
@@ -141,8 +140,8 @@ class MPU9150():
         '''
         try:
             self._write(0x40, 0x6B, self.mpu_addr)
-        except MPU9150_Exception as response:
-            print(response)
+        except OSError:
+            print(MPU9160._I2Cerror)
         return 'asleep'
 
     # passthrough
@@ -155,21 +154,21 @@ class MPU9150():
             if mode is None:
                 pass
             elif mode == True:
-                self._write(0x00, 0x37, self.mpu_addr)
+                self._write(0x02, 0x37, self.mpu_addr)
                 self._write(0x00, 0x6A, self.mpu_addr)
             elif mode == False:
-                self._write(0x02, 0x37, self.mpu_addr)
+                self._write(0x00, 0x37, self.mpu_addr)
                 self._write(0x00, 0x6A, self.mpu_addr)
             else:
                 print('pass either True or False')
 
             # get mode
-            if self._read(1, 0x37, self.mpu_addr) == b'\x02':
-                return False
-            else:
+            if self._read(1, 0x37, self.mpu_addr)[0] & 0x02: # This is more robust (other bits may be set) == b'\x02':
                 return True
-        except MPU9150_Exception as response:
-            print(response)
+            else:
+                return False
+        except OSError:
+            print(MPU9150._I2Cerror)
 
     # sample rate
     def sample_rate(self, rate=None):
@@ -191,8 +190,7 @@ class MPU9150():
 
             # get rate
             rate = gyro_rate/(unp('<H', self._read(1, 0x19, self.mpu_addr))[0]+1)
-        except MPU9150_Exception as response:
-            print(response)
+        except OSError:
             rate = None
         return rate
 
@@ -215,8 +213,7 @@ class MPU9150():
                     print('accel_range can only be 0, 1, 2 or 3')
             # get range
             ari = int(unp('<H', self._read(1, 0x1C, self.mpu_addr))[0]/8)
-        except MPU9150_Exception as response:
-            print(response)
+        except OSError:
             ari = None
         if ari is not None:
             self._ar = ari
@@ -241,9 +238,8 @@ class MPU9150():
                     print('gyro_range can only be 0, 1, 2 or 3')
             # get range
             gri = int(unp('<H', self._read(1, 0x1B, self.mpu_addr))[0]/8)
-        except MPU9150_Exception as response:
+        except OSError:
             gri = None
-            print(response)
 
         if gri is not None:
             self._gr = gri
@@ -256,8 +252,7 @@ class MPU9150():
         '''
         try:
             t = self._read(2, 0x41, self.mpu_addr)
-        except MPU9150_Exception as response:
-            print(response)
+        except OSError:
             t = b'\x00\x00'
         return t
 
@@ -275,8 +270,7 @@ class MPU9150():
         '''
         try:
             axyz = self._read(6, 0x3B, self.mpu_addr)
-        except MPU9150_Exception as response:
-            print(response)
+        except OSError:
             axyz = b'\x00\x00\x00\x00\x00\x00'
         return axyz
 
@@ -306,8 +300,7 @@ class MPU9150():
         '''
         try:
             gxyz = self._read(6, 0x43, self.mpu_addr)
-        except MPU9150_Exception as response:
-            print(response)
+        except OSError:
             gxyz = b'\x00\x00\x00\x00\x00\x00'
         return gxyz
 
@@ -336,14 +329,50 @@ class MPU9150():
         Returns the mag on xyz in bytes.
         '''
         try:
-            self._write(0x01, 0x0A, self.mag_addr)
-            while self._read(1, 0x02, self.mag_addr) != b'\x01':
-                pass
+            if not self.mag_ready: # Blocking read, trigger mag and wait
+                self._write(0x01, 0x0A, self.mag_addr)
+                while self._read(1, 0x02, self.mag_addr) != b'\x01':
+                    pass
             mxyz = self._read(6, 0x03, self.mag_addr)
-        except MPU9150_Exception as response:
-            print(response)
+            self.mag_ready = False
+        except OSError:
             mxyz = b'\x00\x00\x00\x00\x00\x00'
         return mxyz
+
+    def get_mag_status(self):
+        '''
+        Support for nonblocking magnetometer reads. Returns a function instance.
+        The first call to a function instance initiates the hardware and returns None.
+        Subsequent calls test the mag status: not ready None, ready 1, error 2.
+        '''
+        init = True
+        def make_magread():
+            nonlocal init
+            try:
+                if init:
+                    self._write(0x01, 0x0A, self.mag_addr)
+                    init = False
+                    return None
+                #test the device
+                if self._read(1, 0x02, self.mag_addr) == b'\x01':
+                    self.mag_ready = True # Stop get_mag_raw from re-initialising the hardware
+                    return 1
+                return None # Not yet ready
+            except OSError:
+                return 2
+        return make_magread
+
+    def _get_mag_corrections(self):
+        '''
+        Read magnetometer correction values from ROM. Perform the maths as decribed
+        on page 59 of register map and store the results.
+        '''
+        self._write(0x0F, 0x0A, self.mag_addr)
+        data = self._read(3, 0x10, self.mag_addr)
+        x = (0.5*(data[0] -128))/128 + 1
+        y = (0.5*(data[1] -128))/128 + 1
+        z = (0.5*(data[2] -128))/128 + 1
+        return (x, y, z)
 
     # get mag
     def get_mag(self, xyz=None):
@@ -351,14 +380,13 @@ class MPU9150():
         Returns the compass data on axis passed in arg in uT. Pass xyz or every 
         subset of this string. None defaults to xyz.
         '''
-        # TODO: Sensitivity Adjustment as described in page 59 of register map
         if xyz is None:
             xyz = 'xyz'
         scale = 3.33198
-        raw = self.get_mag_raw()
-        mxyz = {'y': unp('<h', raw[0:2])[0]/scale,
-                'x': unp('<h', raw[2:4])[0]/scale,
-                'z': -unp('<h', raw[4:6])[0]/scale}
+        raw = self.get_mag_raw() # Note axis twiddling
+        mxyz = {'y': unp('<h', raw[0:2])[0]*self.mag_correction[1]/scale,
+                'x': unp('<h', raw[2:4])[0]*self.mag_correction[0]/scale,
+                'z': -unp('<h', raw[4:6])[0]*self.mag_correction[2]/scale}
 
         mout = []
         for char in xyz:
