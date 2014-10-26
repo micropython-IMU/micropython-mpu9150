@@ -85,7 +85,7 @@ class MPU9150():
         try:
             self.mag_correction = self._get_mag_corrections()
         except OSError:
-            print(MPU9160._I2Cerror)
+            print(MPU9150._I2Cerror)
         self.accel_range(3)
         self._ar = self.accel_range()
         self.gyro_range(3)
@@ -130,7 +130,7 @@ class MPU9150():
         try:
             self._write(0x01, 0x6B, self.mpu_addr)
         except OSError:
-            print(MPU9160._I2Cerror)
+            print(MPU9150._I2Cerror)
         return 'awake'
 
     # mode
@@ -141,7 +141,7 @@ class MPU9150():
         try:
             self._write(0x40, 0x6B, self.mpu_addr)
         except OSError:
-            print(MPU9160._I2Cerror)
+            print(MPU9150._I2Cerror)
         return 'asleep'
 
     # passthrough
