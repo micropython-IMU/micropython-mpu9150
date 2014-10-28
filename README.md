@@ -11,7 +11,6 @@ If you have any questions, open an issue.
 | pyboard| bmp180 |
 |:------:|:------:|
 | VIN    | VIN    |
-| 3V3    | 3Vo    |
 | GND    | GND    |
 | SCL    | SCL    |
 | SDA    | SDA    |
