@@ -8,12 +8,12 @@ If you have any questions, open an issue.
 
 ### Wiring the sensor to the pyboard
 
-| pyboard| bmp180 |
-|:------:|:------:|
-| VIN    | VIN    |
-| GND    | GND    |
-| SCL    | SCL    |
-| SDA    | SDA    |
+| pyboard| mpu9150 |
+|:------:|:-------:|
+| VIN    | 3V3     |
+| GND    | GND     |
+| SCL    | SCL     |
+| SDA    | SDA     |
 
 ### Quickstart
 
