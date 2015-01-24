@@ -64,7 +64,7 @@ wakes the device
 sets the device to sleep mode  
 
 ``passthrough()``
-sets passthrough mode 
+sets passthrough mode  
 ``True``: activates  
 ``False``: deactivates  
 If active, the magnetometer is passed through to the SDA, SCL pads. If you don't
@@ -91,9 +91,9 @@ the axis you want to get.
 ``'xz'``  returns ``[ax,az]``  
 ``None``  defaults to ``'xyz'``  
 
-``get_gyro(xyz=None)``  
-Returns a list of trun rates in the specified directions in deg/s. Pass a sting containing
-the axis you want to get.  
+``get_gyro(xyz=None, use_radians=False)``  
+Returns a list of trun rates in the specified directions in deg/s or rad/s, defaulting to degrees.
+Pass a sting containing the axis you want to get.  
 ``'xyz'`` returns ``[gx, gy, gz]``  
 ``'x'``   returns ``[gx]``  
 ``'xz'``  returns ``[gx,gz]``  
