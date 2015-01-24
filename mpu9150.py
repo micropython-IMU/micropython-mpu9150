@@ -305,14 +305,18 @@ class MPU9150():
         return gxyz
 
     # get gyro
-    def get_gyro(self, xyz=None):
+    def get_gyro(self, xyz=None, use_radians=False):
         '''
-        Returns the turn rate on axis passed in arg in deg/s. Pass xyz or every 
+        Returns the turn rate on axis passed in arg in deg/s or rad/s,
+        defaulting to degrees. Pass xyz or every 
         subset of this string. None defaults to xyz.
         '''
         if xyz is None:
             xyz = 'xyz'
-        scale = (131, 65.5, 32.8, 16.4)
+        if use_radians:
+            scale = (7150, 3755, 1877.5, 938.75)
+        else:
+            scale = (131, 65.5, 32.8, 16.4)
         raw = self.get_gyro_raw()
         gxyz = {'x': unp('>h', raw[0:2])[0]/scale[self._gr],
                 'y': unp('>h', raw[2:4])[0]/scale[self._gr],
