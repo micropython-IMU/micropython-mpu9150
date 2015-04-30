@@ -49,7 +49,7 @@ print(imu.sleep())
 Classes
 -------
 ``MPU9150``  
-Module for the MPU9150 pressure sensor.  
+Module for the MPU9150 sensor.  
 ![UML diagramm](https://raw.githubusercontent.com/turbinenreiter/micropython-mpu9150/master/classes_MPU9150.png "UML diagramm")
 
 
@@ -92,7 +92,7 @@ the axis you want to get.
 ``None``  defaults to ``'xyz'``  
 
 ``get_gyro(xyz=None, use_radians=False)``  
-Returns a list of trun rates in the specified directions in deg/s or rad/s, defaulting to degrees.
+Returns a list of turn rates in the specified directions in deg/s or rad/s, defaulting to degrees.
 Pass a sting containing the axis you want to get.  
 ``'xyz'`` returns ``[gx, gy, gz]``  
 ``'x'``   returns ``[gx]``  
@@ -110,6 +110,22 @@ the axis you want to get.
 ``get_temperature()``  
 Returns the temperature in degrees C.
 
+``filter_range(filter_range=None)``
+Returns the current accel and gyro low pass filter range and sets to ``filter_range`` if argument is passed.
+``filter_range`` can be 0 to 6.
+The digital low pass filter enables the effect of vibration to be reduced in the accelerometer and gyro readings.
+The following table gives the approximate bandwidth and delay for the filter. Precise values differ
+slightly between the accelerometer and the gyro and can be obtained from the device datasheet.
+
+| value | bw(Hz) | Delay(mS) |
+|:---=-:|:------:|:---------:|
+|  0    |  260   |    0.0    |
+|  1    |  184   |    2.0    |
+|  2    |   94   |    3.0    |
+|  3    |   44   |    4.9    |
+|  4    |   21   |    8.5    |
+|  5    |   10   |   13.8    |
+|  6    |    5   |   19.0    |
 
 Instance variables
 ------------------
