@@ -20,6 +20,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 '''
+# 29 April 2015 Experimental support for low pass filters
 # 25 Oct 2014 includes magnetometer corrections and support for non-blocking read
 # Fixes to passthrough method.
 
@@ -189,7 +190,7 @@ class MPU9150():
                 self._write(rate_div, 0x19, self.mpu_addr)
 
             # get rate
-            rate = gyro_rate/(unp('<H', self._read(1, 0x19, self.mpu_addr))[0]+1)
+            rate = gyro_rate/(self._read(1, 0x19, self.mpu_addr)[0]+1)
         except OSError:
             rate = None
         return rate
@@ -212,7 +213,7 @@ class MPU9150():
                 except IndexError:
                     print('accel_range can only be 0, 1, 2 or 3')
             # get range
-            ari = int(unp('<H', self._read(1, 0x1C, self.mpu_addr))[0]/8)
+            ari = self._read(1, 0x1C, self.mpu_addr)[0]//8
         except OSError:
             ari = None
         if ari is not None:
@@ -237,13 +238,36 @@ class MPU9150():
                 except IndexError:
                     print('gyro_range can only be 0, 1, 2 or 3')
             # get range
-            gri = int(unp('<H', self._read(1, 0x1B, self.mpu_addr))[0]/8)
+            gri = self._read(1, 0x1B, self.mpu_addr)[0]//8
         except OSError:
             gri = None
 
         if gri is not None:
             self._gr = gri
         return gri
+
+    # Low pass filters
+    def filter_range(self, filt=None):
+        '''
+        Returns the gyro and accel low pass filter cutoff frequency
+        Pass:               0   1   2   3   4   5   6   7
+        Cutoff (Hz):        260 184 94  44  24  10  5   n/a
+        '''
+        # set range
+        try:
+            if filt is None:
+                pass
+            else:
+                if (filt >= 0) and (filt < 7):
+                    self._write(filt, 0x1A, self.mpu_addr)
+                else:
+                    print('Filter coefficient must be between 0 and 6')
+            # get range
+            res = self._read(1, 0x1A, self.mpu_addr)[0] & 7
+        except OSError:
+            res = None
+
+        return res
 
     # get raw temperature
     def get_temperature_raw(self):
@@ -305,18 +329,14 @@ class MPU9150():
         return gxyz
 
     # get gyro
-    def get_gyro(self, xyz=None, use_radians=False):
+    def get_gyro(self, xyz=None):
         '''
-        Returns the turn rate on axis passed in arg in deg/s or rad/s,
-        defaulting to degrees. Pass xyz or every 
+        Returns the turn rate on axis passed in arg in deg/s. Pass xyz or every 
         subset of this string. None defaults to xyz.
         '''
         if xyz is None:
             xyz = 'xyz'
-        if use_radians:
-            scale = (7150, 3755, 1877.5, 938.75)
-        else:
-            scale = (131, 65.5, 32.8, 16.4)
+        scale = (131, 65.5, 32.8, 16.4)
         raw = self.get_gyro_raw()
         gxyz = {'x': unp('>h', raw[0:2])[0]/scale[self._gr],
                 'y': unp('>h', raw[2:4])[0]/scale[self._gr],
