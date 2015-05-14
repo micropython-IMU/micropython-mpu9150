@@ -20,6 +20,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 '''
+# 11 May 2015 accel and gyro read fuctions for use in interrut handlers
 # 29 April 2015 Experimental support for low pass filters
 # 25 Oct 2014 includes magnetometer corrections and support for non-blocking read
 # Fixes to passthrough method.
@@ -27,6 +28,14 @@ THE SOFTWARE.
 import pyb
 import os
 from struct import unpack as unp
+
+def bytes_toint(msb, lsb):
+    '''
+    Convert two bytes to signed integer
+    '''
+    if not msb & 0x80:
+        return msb << 8 | lsb # +ve
+    return -(((msb ^ 255) << 8)| (lsb ^ 255) +1)
 
 class MPU9150():
     '''
@@ -62,6 +71,9 @@ class MPU9150():
 
         self.mag_ready = False # Magnetometer control: set by status check, read and cleared by get_mag_raw
         self.timeout = 10
+        self.buf6 = bytearray([0]*6) # Pre-allocated buffers for use in callbacks
+        self.iaccel = [0]*3
+        self.igyro = [0]*3
 
         # create i2c object
         self.disable_interrupts = False
@@ -108,6 +120,15 @@ class MPU9150():
         pyb.enable_irq(irq_state)
         return result
 
+    def _read6(self, memaddr):
+        '''
+        Read for use in interrupt handlers. No error trapping
+        possible. Read 6 bytes to pre-allocated buffer
+        '''
+        self._mpu_i2c.mem_read(self.buf6,
+                                        self.mpu_addr,
+                                        memaddr,
+                                        timeout=self.timeout)
     # write to device
     def _write(self, data, memaddr, devaddr):
         '''
@@ -298,6 +319,16 @@ class MPU9150():
             axyz = b'\x00\x00\x00\x00\x00\x00'
         return axyz
 
+    def get_accel_irq(self):
+        '''
+        For use in interrupt handlers. Sets self.iaccel[] to signed
+        unscaled integer accelerometer values
+        '''
+        self._read6(0x3B)
+        self.iaccel[0] = bytes_toint(self.buf6[0], self.buf6[1])
+        self.iaccel[1] = bytes_toint(self.buf6[2], self.buf6[3])
+        self.iaccel[2] = bytes_toint(self.buf6[4], self.buf6[5])
+
     # get acceleration
     def get_accel(self, xyz=None):
         '''
@@ -327,6 +358,16 @@ class MPU9150():
         except OSError:
             gxyz = b'\x00\x00\x00\x00\x00\x00'
         return gxyz
+
+    def get_gyro_irq(self):
+        '''
+        For use in interrupt handlers. Sets self.igyro[] to signed
+        unscaled integer gyro values.
+        '''
+        self._read6(0x43)
+        self.igyro[0] = bytes_toint(self.buf6[0], self.buf6[1])
+        self.igyro[1] = bytes_toint(self.buf6[2], self.buf6[3])
+        self.igyro[2] = bytes_toint(self.buf6[4], self.buf6[5])
 
     # get gyro
     def get_gyro(self, xyz=None):

@@ -127,6 +127,13 @@ slightly between the accelerometer and the gyro and can be obtained from the dev
 |  5    |   10   |   13.8    |
 |  6    |    5   |   19.0    |
 
+``get_accel_irq()``
+``get_gyro_irq()``
+These methods provide a means of acquiring gyro and accelerometer readings within an interrupt callback. They
+populate iaccel[] and igyro[] instance variables respectively. These are 3 element lists containing integer
+values with elements 0, 1 and 2 holding x, y and z values. These values are signed but not scaled: it is the
+responsibility of the interrupt handler code to apply a scaling factor depending on the range in use.
+
 Instance variables
 ------------------
 ``chip_id``  
@@ -143,3 +150,9 @@ Timeout for I2C operations.
 
 ``disable_interrupts``  
 True or False, disables/enables interrupts. Disable to protect I2C operations.
+
+``iaccel``
+``igyro``
+3 element lists containing integer x, y, z accelerometer and gyro readings. These are used in conjunction with
+get_accel_irq() and get_gyro_irq() where the device must be accessed from within an interrupt handler. In
+normal use they are unpopulated.
