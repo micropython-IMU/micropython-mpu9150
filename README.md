@@ -127,7 +127,7 @@ slightly between the accelerometer and the gyro and can be obtained from the dev
 |  5    |   10   |   13.8    |
 |  6    |    5   |   19.0    |
 
-### Use in interrupt callbacks
+#### Use in interrupt callbacks
 
 These don't support code which uses the heap, which rules out a number of standard Python techniques including
 exception handling and the use of floating point. The following methods provide access to the device where this
