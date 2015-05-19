@@ -136,9 +136,10 @@ must be performed in a callback.
 ``get_accel_irq()``
 ``get_gyro_irq()``
 ``get_mag_irq()``
-These methods populate iaccel[], igyro[], and imag[] instance variables respectively. These are 3 element lists
-containing integer values with elements 0, 1 and 2 holding x, y and z values. These values are signed but not scaled:
-it is the responsibility of the callback to apply a scaling factor depending on the range in use.
+These methods populate ``iaccel[]``, ``igyro[]``, and ``imag[]`` instance variables respectively. These are
+3 element lists containing integer values with elements 0, 1 and 2 holding x, y and z values. These values
+are signed but not scaled: it is the responsibility of the callback to apply a scaling factor depending on the
+range in use.
 
 All return immediately. The magnetometer device differs from the others: whereas the accelerometer and gyro values
 are automatically kept up to date the magnetometer has to be triggered and takes time to acquire a reading. Hence
@@ -178,3 +179,7 @@ True or False, disables/enables interrupts. Disable to protect I2C operations.
 3 element lists containing integer x, y, z accelerometer and gyro readings. These are used in conjunction with
 get_accel_irq(), get_gyro_irq() and get_mag_irq() where the device is accessed from within an interrupt handler. In
 normal use they are unpopulated.
+
+``mag_correction``
+A 3 element list containing x, y, and z magnetometer correction values. These are normally applied automatically
+but may be required if using the device in an interrupt callback (see above).
