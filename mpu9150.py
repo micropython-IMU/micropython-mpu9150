@@ -31,7 +31,8 @@ from struct import unpack as unp
 
 def bytes_toint(msb, lsb):
     '''
-    Convert two bytes to signed integer
+    Convert two bytes to signed integer (big endian)
+    for little endian reverse msb, lsb arguments
     '''
     if not msb & 0x80:
         return msb << 8 | lsb # +ve
@@ -70,10 +71,13 @@ class MPU9150():
             no_of_dev = 1
 
         self.mag_ready = False # Magnetometer control: set by status check, read and cleared by get_mag_raw
+        self.mag_triggered = False # for use in callbacks
         self.timeout = 10
         self.buf6 = bytearray([0]*6) # Pre-allocated buffers for use in callbacks
+        self.buf1 = bytearray([0]*1)
         self.iaccel = [0]*3
         self.igyro = [0]*3
+        self.imag = [0]*3
 
         # create i2c object
         self.disable_interrupts = False
@@ -120,13 +124,22 @@ class MPU9150():
         pyb.enable_irq(irq_state)
         return result
 
-    def _read6(self, memaddr):
+    def _read6(self, memaddr, devaddr):
         '''
         Read for use in interrupt handlers. No error trapping
         possible. Read 6 bytes to pre-allocated buffer
         '''
         self._mpu_i2c.mem_read(self.buf6,
-                                        self.mpu_addr,
+                                        devaddr,
+                                        memaddr,
+                                        timeout=self.timeout)
+    def _read1(self, memaddr, devaddr):
+        '''
+        Read for use in interrupt handlers. No error trapping
+        possible. Read 1 byte to pre-allocated buffer
+        '''
+        self._mpu_i2c.mem_read(self.buf1,
+                                        devaddr,
                                         memaddr,
                                         timeout=self.timeout)
     # write to device
@@ -324,7 +337,7 @@ class MPU9150():
         For use in interrupt handlers. Sets self.iaccel[] to signed
         unscaled integer accelerometer values
         '''
-        self._read6(0x3B)
+        self._read6(0x3B, self.mpu_addr)
         self.iaccel[0] = bytes_toint(self.buf6[0], self.buf6[1])
         self.iaccel[1] = bytes_toint(self.buf6[2], self.buf6[3])
         self.iaccel[2] = bytes_toint(self.buf6[4], self.buf6[5])
@@ -364,7 +377,7 @@ class MPU9150():
         For use in interrupt handlers. Sets self.igyro[] to signed
         unscaled integer gyro values.
         '''
-        self._read6(0x43)
+        self._read6(0x43, self.mpu_addr)
         self.igyro[0] = bytes_toint(self.buf6[0], self.buf6[1])
         self.igyro[1] = bytes_toint(self.buf6[2], self.buf6[3])
         self.igyro[2] = bytes_toint(self.buf6[4], self.buf6[5])
@@ -457,3 +470,16 @@ class MPU9150():
         for char in xyz:
             mout.append(mxyz[char])
         return mout
+
+    def get_mag_irq(self): # Uncorrected values because floating point uses heap
+        if not self.mag_triggered:
+            self._mpu_i2c.mem_write(1, self.mag_addr, 0x0A, timeout=self.timeout)
+#            self._write(0x01, 0x0A, self.mag_addr)
+            self.mag_triggered = True
+        self._read1(0x02, self.mag_addr)
+        if self.buf1[0] == 1:
+            self._read6(0x03, self.mag_addr) # Note axis twiddling
+            self.imag[1] = bytes_toint(self.buf6[1], self.buf6[0])
+            self.imag[0] = bytes_toint(self.buf6[3], self.buf6[2])
+            self.imag[2] = -bytes_toint(self.buf6[5], self.buf6[4])
+            self.mag_triggered = False
