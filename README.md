@@ -127,12 +127,33 @@ slightly between the accelerometer and the gyro and can be obtained from the dev
 |  5    |   10   |   13.8    |
 |  6    |    5   |   19.0    |
 
+### Use in interrupt callbacks
+
+These don't support code which uses the heap, which rules out a number of standard Python techniques including
+exception handling and the use of floating point. The following methods provide access to the device where this
+must be performed in a callback.
+
 ``get_accel_irq()``
 ``get_gyro_irq()``
-These methods provide a means of acquiring gyro and accelerometer readings within an interrupt callback. They
-populate iaccel[] and igyro[] instance variables respectively. These are 3 element lists containing integer
-values with elements 0, 1 and 2 holding x, y and z values. These values are signed but not scaled: it is the
-responsibility of the interrupt handler code to apply a scaling factor depending on the range in use.
+``get_mag_irq()``
+These methods populate iaccel[], igyro[], and imag[] instance variables respectively. These are 3 element lists
+containing integer values with elements 0, 1 and 2 holding x, y and z values. These values are signed but not scaled:
+it is the responsibility of the callback to apply a scaling factor depending on the range in use.
+
+All return immediately. The magnetometer device differs from the others: whereas the accelerometer and gyro values
+are automatically kept up to date the magnetometer has to be triggered and takes time to acquire a reading. Hence
+``get_mag_irq()`` is designed for repeated polling, as in a timer callback. If the device has been triggered
+and is ready it reads the data into the ``imag`` instance array. If it's triggered but not yet ready it does
+nothing. If it's untriggered it triggers it leaves the array unchanged. Thus, under repeated polling, the array
+will always hold the most recent data acquired from the magnetometer.
+
+Note that the scaling factors of the accelerometer and gyro depend only on the range selected, hence these
+can be hard coded in the callback. This works with the magnetometer but to get the most accurate readings the
+factory-set corrections should be applied. These are in instance variable ``mag_correction[]`` but being
+floating point values can't be used in a callback. Options (depending on application) are to apply them
+outside the callback, or convert them to scaled integers in initialisation code.
+
+See tests/irqtest.py for example code.
 
 Instance variables
 ------------------
@@ -153,6 +174,7 @@ True or False, disables/enables interrupts. Disable to protect I2C operations.
 
 ``iaccel``
 ``igyro``
+``imag``
 3 element lists containing integer x, y, z accelerometer and gyro readings. These are used in conjunction with
-get_accel_irq() and get_gyro_irq() where the device must be accessed from within an interrupt handler. In
+get_accel_irq(), get_gyro_irq() and get_mag_irq() where the device is accessed from within an interrupt handler. In
 normal use they are unpopulated.
