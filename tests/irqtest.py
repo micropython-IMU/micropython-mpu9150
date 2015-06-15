@@ -7,11 +7,9 @@ import micropython
 micropython.alloc_emergency_exception_buf(100)
 
 # Note: with a magnetometer read in the callback, a frequency of 1KHz hogged the CPU
-tim = pyb.Timer(4, freq=500)            # freq in Hz
+tim = pyb.Timer(4, freq=20)            # freq in Hz
 
-imu = MPU9150('Y', 1, True)
-imu.gyro_range(0)
-imu.accel_range(0)
+imu = MPU9150('X')
 
 def cb(timer):                          # Callback: populate array members
     imu.get_gyro_irq()
@@ -19,15 +17,15 @@ def cb(timer):                          # Callback: populate array members
     imu.get_mag_irq()
 
 tim.callback(cb)
-
+print("You should see slightly different values on each pair of readings.")
+print("            Accelerometer                               Gyro                                Magnetometer")
 for count in range(10):
     pyb.delay(400)
     scale = 3.33198                     # Correction factors involve floating point
-    mag = [0]*3                         # hence can't be done in interrupt callback
-    for x in range(3):
-        mag[x] = imu.imag[x]*imu.mag_correction[x]/scale
-    print("Interrupt:", [x/16384 for x in imu.iaccel], [x/131 for x in imu.igyro], mag)
-    print("Normal:   ", imu.get_accel(), imu.get_gyro(), imu.get_mag())
+    mag = list(map(lambda x, y : x*y/scale, imu.mag.ixyz, imu.mag_correction))
+    print("Interrupt:", [x/16384 for x in imu.accel.ixyz], [x/131 for x in imu.gyro.ixyz], mag)
+    pyb.delay(100)
+    print("Normal:   ", imu.accel.xyz, imu.gyro.xyz, imu.mag.xyz)
     print()
 
 tim.callback(None)
@@ -47,5 +45,5 @@ def timing():                           # Check magnetometer call timings
 
     # 1st call initialises hardware
     # 2nd call tests it (not ready)
-    # 3rd call tests ready and reads data
+    # 3rd call tests ready (it will be after 200mS) and reads data
     print(t1, t2, t3) # 1st call takes 265uS second takes 175uS. 3rd takes 509uS

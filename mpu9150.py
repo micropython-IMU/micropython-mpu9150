@@ -20,25 +20,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 '''
-# 11 May 2015 accel and gyro read fuctions for use in interrut handlers
-# 29 April 2015 Experimental support for low pass filters
-# 25 Oct 2014 includes magnetometer corrections and support for non-blocking read
-# Fixes to passthrough method.
+# 15th June 2015 Now uses subclass of InvenSenseMPU
 
+from imu import InvenSenseMPU, bytes_toint
+from vector3d import Vector3d
 import pyb
-import os
-from struct import unpack as unp
 
-def bytes_toint(msb, lsb):
-    '''
-    Convert two bytes to signed integer (big endian)
-    for little endian reverse msb, lsb arguments
-    '''
-    if not msb & 0x80:
-        return msb << 8 | lsb # +ve
-    return -(((msb ^ 255) << 8)| (lsb ^ 255) +1)
+def default_mag_wait():
+    pyb.delay(1)
 
-class MPU9150():
+X_AXIS = const(0)
+Y_AXIS = const(1)
+Z_AXIS = const(2)
+
+# MPU9150 constructor arguments
+# 1.    side_str 'X' or 'Y' depending on the Pyboard I2C interface being used
+# 2.    optional device_addr 0, 1 depending on the voltage applied to pin AD0 (Drotek default is 1)
+#       if None driver will scan for a device (if one device only is on bus)
+# 3, 4. transposition, scaling optional 3-tuples allowing for outputs to be based on vehicle
+#       coordinates rather than those of the sensor itself. See readme.
+
+
+class MPU9150(InvenSenseMPU):
     '''
     Module for the MPU9150 9DOF IMU. Pass X or Y according to on which side the
     sensor is connected. Pass 1 for the first, 2 for the second connected sensor.
@@ -52,434 +55,152 @@ class MPU9150():
                             # connected, first on 104,
                             # second on 105
     _mag_addr = 12
-    _I2Cerror = "I2C communication failure"
-    # init
-    def __init__(self, side_str=None, no_of_dev=None, disable_interrupts=None):
+    _chip_id = 104
+    def __init__(self, side_str, device_addr = None, transposition = (0,1,2), scaling = (1,1,1)):
+        super().__init__(side_str, device_addr, transposition, scaling)
+        self._mag = Vector3d(transposition, scaling, self._mag_callback)
+        self.filter_range = 0           # fast filtered response
+        self._mag_stale_count = 0       # Count of consecutive reads where old data was returned
+        self.mag_triggered = False      # Ensure mag is triggered once only until it's read
+        self.mag_correction = self._magsetup()  # Returns correction factors.
+        self.mag_wait_func = default_mag_wait
 
-        # choose which i2c port to use
-        if side_str == 'X':
-            side = 1
-        elif side_str == 'Y':
-            side = 2
-        else:
-            print('pass either X or Y, defaulting to X')
-            side = 1
-
-        # choose which sensor to use if two are connected
-        if no_of_dev is None:
-            print('pass either 1 or 2, defaulting to 1')
-            no_of_dev = 1
-
-        self.mag_ready = False # Magnetometer control: set by status check, read and cleared by get_mag_raw
-        self.mag_triggered = False # for use in callbacks
-        self.timeout = 10
-        self.buf6 = bytearray([0]*6) # Pre-allocated buffers for use in callbacks
-        self.buf1 = bytearray([0]*1)
-        self.iaccel = [0]*3
-        self.igyro = [0]*3
-        self.imag = [0]*3
-
-        # create i2c object
-        self.disable_interrupts = False
-        self._mpu_i2c = pyb.I2C(side, pyb.I2C.MASTER)
-        self.mpu_addr = int(self._mpu_addr[no_of_dev-1])
-        self.mag_addr = self._mag_addr
-        self.chip_id = int(unp('>h', self._read(1, 0x75, self.mpu_addr))[0])
-
-        # now apply user setting for interrupts
-        if disable_interrupts is True:
-            self.disable_interrupts = True
-        elif disable_interrupts is False:
-            self.disable_interrupts = False
-        else:
-            print('pass either True or False, defaulting to True')
-            self.disable_interrupts = True
-
-        # wake it up
-        self.wake()
-        self.passthrough(True) # Enable mag access from main I2C bus
-        self.mag_correction = (1.0, 1.0, 1.0)
-        try:
-            self.mag_correction = self._get_mag_corrections()
-        except OSError:
-            print(MPU9150._I2Cerror)
-        self.accel_range(3)
-        self._ar = self.accel_range()
-        self.gyro_range(3)
-        self._gr = self.gyro_range()
-
-    # read from device
-    def _read(self, count, memaddr, devaddr):
-        '''
-        Perform a memory read. Caller should trap OSError. Possible values of
-        error args[0]: errorno.ETIMEDOUT errno.EBUSY or errno.EIO
-        '''
-        irq_state = True
-        if self.disable_interrupts:
-            irq_state = pyb.disable_irq()
-        result = self._mpu_i2c.mem_read(count,
-                                        devaddr,
-                                        memaddr,
-                                        timeout=self.timeout)
-        pyb.enable_irq(irq_state)
-        return result
-
-    def _read6(self, memaddr, devaddr):
-        '''
-        Read for use in interrupt handlers. No error trapping
-        possible. Read 6 bytes to pre-allocated buffer
-        '''
-        self._mpu_i2c.mem_read(self.buf6,
-                                        devaddr,
-                                        memaddr,
-                                        timeout=self.timeout)
-    def _read1(self, memaddr, devaddr):
-        '''
-        Read for use in interrupt handlers. No error trapping
-        possible. Read 1 byte to pre-allocated buffer
-        '''
-        self._mpu_i2c.mem_read(self.buf1,
-                                        devaddr,
-                                        memaddr,
-                                        timeout=self.timeout)
-    # write to device
-    def _write(self, data, memaddr, devaddr):
-        '''
-        Perform a memory write. Caller should trap OSError.
-        '''
-        irq_state = True
-        if self.disable_interrupts:
-            irq_state = pyb.disable_irq()
-        result = self._mpu_i2c.mem_write(data,
-                                         devaddr,
-                                         memaddr,
-                                         timeout=self.timeout)
-        pyb.enable_irq(irq_state)
-        return result
-
-    # wake
-    def wake(self):
-        '''
-        Wakes the device.
-        '''
-        try:
-            self._write(0x01, 0x6B, self.mpu_addr)
-        except OSError:
-            print(MPU9150._I2Cerror)
-        return 'awake'
-
-    # mode
-    def sleep(self):
-        '''
-        Sets the device to sleep mode.
-        '''
-        try:
-            self._write(0x40, 0x6B, self.mpu_addr)
-        except OSError:
-            print(MPU9150._I2Cerror)
-        return 'asleep'
-
-    # passthrough
-    def passthrough(self, mode=None):
-        '''
-        Returns passthrough mode, pass True or False to activate/deactivate.
-        '''
-        # set mode
-        try:
-            if mode is None:
-                pass
-            elif mode == True:
-                self._write(0x02, 0x37, self.mpu_addr)
-                self._write(0x00, 0x6A, self.mpu_addr)
-            elif mode == False:
-                self._write(0x00, 0x37, self.mpu_addr)
-                self._write(0x00, 0x6A, self.mpu_addr)
-            else:
-                print('pass either True or False')
-
-            # get mode
-            if self._read(1, 0x37, self.mpu_addr)[0] & 0x02: # This is more robust (other bits may be set) == b'\x02':
-                return True
-            else:
-                return False
-        except OSError:
-            print(MPU9150._I2Cerror)
-
-    # sample rate
-    def sample_rate(self, rate=None):
-        '''
-        Returns the sample rate or sets it to the passed arg in Hz. Note that
-        not all sample rates are possible. Check the return value to see which
-        rate was actually set.
-        '''
-
-        gyro_rate = 8000 # Hz
-
-        # set rate
-        try:
-            if rate is not None:
-                rate_div = int( gyro_rate/rate - 1 )
-                if rate_div > 255:
-                    rate_div = 255
-                self._write(rate_div, 0x19, self.mpu_addr)
-
-            # get rate
-            rate = gyro_rate/(self._read(1, 0x19, self.mpu_addr)[0]+1)
-        except OSError:
-            rate = None
-        return rate
-
-    # accelerometer range
-    def accel_range(self, accel_range=None):
-        '''
-        Returns the accelerometer range or sets it to the passed arg.
-        Pass:               0   1   2   3
-        for range +/-:      2   4   8   16  g 
-        '''
-        # set range
-        try:
-            if accel_range is None:
-                pass
-            else:
-                ar = (0x00, 0x08, 0x10, 0x18)
-                try:
-                    self._write(ar[accel_range], 0x1C, self.mpu_addr)
-                except IndexError:
-                    print('accel_range can only be 0, 1, 2 or 3')
-            # get range
-            ari = self._read(1, 0x1C, self.mpu_addr)[0]//8
-        except OSError:
-            ari = None
-        if ari is not None:
-            self._ar = ari
-        return ari
-
-    # gyroscope range
-    def gyro_range(self, gyro_range=None):
-        '''
-        Returns the gyroscope range or sets it to the passed arg.
-        Pass:               0   1   2    3
-        for range +/-:      250 500 1000 2000  degrees/second
-        '''
-        # set range
-        try:
-            if gyro_range is None:
-                pass
-            else:
-                gr = (0x00, 0x08, 0x10, 0x18)
-                try:
-                    self._write(gr[gyro_range], 0x1B, self.mpu_addr)
-                except IndexError:
-                    print('gyro_range can only be 0, 1, 2 or 3')
-            # get range
-            gri = self._read(1, 0x1B, self.mpu_addr)[0]//8
-        except OSError:
-            gri = None
-
-        if gri is not None:
-            self._gr = gri
-        return gri
-
-    # Low pass filters
-    def filter_range(self, filt=None):
-        '''
-        Returns the gyro and accel low pass filter cutoff frequency
-        Pass:               0   1   2   3   4   5   6   7
-        Cutoff (Hz):        260 184 94  44  24  10  5   n/a
-        '''
-        # set range
-        try:
-            if filt is None:
-                pass
-            else:
-                if (filt >= 0) and (filt < 7):
-                    self._write(filt, 0x1A, self.mpu_addr)
-                else:
-                    print('Filter coefficient must be between 0 and 6')
-            # get range
-            res = self._read(1, 0x1A, self.mpu_addr)[0] & 7
-        except OSError:
-            res = None
-
-        return res
-
-    # get raw temperature
-    def get_temperature_raw(self):
-        '''
-        Returns the temperature in bytes.
-        '''
-        try:
-            t = self._read(2, 0x41, self.mpu_addr)
-        except OSError:
-            t = b'\x00\x00'
-        return t
+    @property
+    def sensors(self):
+        return self._accel, self._gyro, self._mag
 
     # get temperature
-    def get_temperature(self):
+    @property
+    def temperature(self):
         '''
         Returns the temperature in degree C.
         '''
-        return unp('>h', self.get_temperature_raw())[0]/340 + 35
+        try:
+            self._read(self.buf2, 0x41, self.mpu_addr)
+        except OSError:
+            print(MPU9250._I2Cerror)
+            return 0
+        return bytes_toint(self.buf2[0], self.buf2[1])/340 + 35 # I think
 
-    # get raw acceleration
-    def get_accel_raw(self):
+    # Low pass filters
+    @property
+    def filter_range(self):
         '''
-        Returns the accelerations on xyz in bytes.
+        Returns the gyro and temperature sensor low pass filter cutoff frequency
+        Pass:               0   1   2   3   4   5   6   7
+        Cutoff (Hz):        250 184 92  41  20  10  5   3600
+        Sample rate (KHz):  8   1   1   1   1   1   1   8
         '''
         try:
-            axyz = self._read(6, 0x3B, self.mpu_addr)
+            self._read(self.buf1, 0x1A, self.mpu_addr)
+            res = self.buf1[0] & 7
         except OSError:
-            axyz = b'\x00\x00\x00\x00\x00\x00'
-        return axyz
+            print(MPU9250._I2Cerror)
+            res = None
+        return res
 
-    def get_accel_irq(self):
-        '''
-        For use in interrupt handlers. Sets self.iaccel[] to signed
-        unscaled integer accelerometer values
-        '''
-        self._read6(0x3B, self.mpu_addr)
-        self.iaccel[0] = bytes_toint(self.buf6[0], self.buf6[1])
-        self.iaccel[1] = bytes_toint(self.buf6[2], self.buf6[3])
-        self.iaccel[2] = bytes_toint(self.buf6[4], self.buf6[5])
+    @filter_range.setter
+    def filter_range(self, filt):
+        # set range
+        try:
+            if (filt >= 0) and (filt < 7):
+                self._write(filt, 0x1A, self.mpu_addr)
+            else:
+                print('Filter coefficient must be between 0 and 6')
+        except OSError:
+           print(MPU9250._I2Cerror)
 
-    # get acceleration
-    def get_accel(self, xyz=None):
-        '''
-        Returns the accelerations on axis passed in arg. Pass xyz or every 
-        subset of this string. None defaults to xyz.
-        '''
-        if xyz is None:
-            xyz = 'xyz'
-        scale = (16384, 8192, 4096, 2048)
-        raw = self.get_accel_raw()
-        axyz = {'x': unp('>h', raw[0:2])[0]/scale[self._ar],
-                'y': unp('>h', raw[2:4])[0]/scale[self._ar],
-                'z': unp('>h', raw[4:6])[0]/scale[self._ar]}
+    @property                   # Triggers mag, waits for it to be ready, then returns the instance
+    def mag(self): # should be ready in 9mS max
+        while not self._mag_ready:
+            self.mag_wait_func()
+        return self._mag
 
-        aout = []
-        for char in xyz:
-            aout.append(axyz[char])
-        return aout
+    @property
+    def mag_nonblocking(self):
+        return self._mag
 
-    # get raw gyro
-    def get_gyro_raw(self):
+    def mag_trigger(self):      # Initiate a mag reading. Can be called repeatedly.
+        if not self.mag_triggered:
+            self._write(0x01, 0x0A, self._mag_addr) # single measurement mode
+            self.mag_triggered = True
+
+    @property
+    def mag_stale_count(self):  # Number of consecutive times old data was returned
+        return self._mag_stale_count
+
+    @property
+    def _mag_ready(self):       # Initiates a reading if necessary. Returns ready state.
+        self.mag_trigger()
+        self._read(self.buf1, 0x02, self._mag_addr)
+        return bool(self.buf1[0] & 1)
+
+    def _mag_callback(self):
         '''
-        Returns the turn rate on xyz in bytes.
+        Update magnetometer Vector3d object (if data available)
+        '''
+        try:                                    # If read fails, returns last valid data
+            if self._mag_ready:                 # Starts mag if necessary
+                self._read(self.buf6, 0x03, self._mag_addr)
+                self.mag_triggered = False
+            else:
+                self._mag_stale_count += 1
+                return self._mag                # Data not ready: return last value
+            self._read(self.buf6, 0x03, self._mag_addr)
+            self._read(self.buf1, 0x09, self._mag_addr) # Read ST2
+        except OSError:
+            self.mag_triggered = False
+            self._mag_stale_count += 1
+            return self._mag
+        if self.buf1[0] & 0x0C > 0:             # An overflow or data error has occurred
+            self._mag_stale_count +=1
+            return self._mag
+        self._mag._ivector[1] = bytes_toint(self.buf6[1], self.buf6[0])  # Note axis twiddling and little endian
+        self._mag._ivector[0] = bytes_toint(self.buf6[3], self.buf6[2])
+        self._mag._ivector[2] = -bytes_toint(self.buf6[5], self.buf6[4])
+        scale = 0.3                         # 0.3uT/LSB
+        self._mag._set(X_AXIS, self._mag._ivector[0]*self.mag_correction[0]*scale)
+        self._mag._set(Y_AXIS, self._mag._ivector[1]*self.mag_correction[1]*scale)
+        self._mag._set(Z_AXIS, self._mag._ivector[2]*self.mag_correction[2]*scale)
+        self._mag_stale_count = 0
+
+    def mag_status(self):
+        '''
+        Support for nonblocking magnetometer reads. Triggers the mag if required.
+        returns mag status: not ready None, ready 1, error 2.
         '''
         try:
-            gxyz = self._read(6, 0x43, self.mpu_addr)
+            if self._mag_ready:
+                return 1
+            return None
         except OSError:
-            gxyz = b'\x00\x00\x00\x00\x00\x00'
-        return gxyz
+            return 2
 
-    def get_gyro_irq(self):
-        '''
-        For use in interrupt handlers. Sets self.igyro[] to signed
-        unscaled integer gyro values.
-        '''
-        self._read6(0x43, self.mpu_addr)
-        self.igyro[0] = bytes_toint(self.buf6[0], self.buf6[1])
-        self.igyro[1] = bytes_toint(self.buf6[2], self.buf6[3])
-        self.igyro[2] = bytes_toint(self.buf6[4], self.buf6[5])
-
-    # get gyro
-    def get_gyro(self, xyz=None):
-        '''
-        Returns the turn rate on axis passed in arg in deg/s. Pass xyz or every 
-        subset of this string. None defaults to xyz.
-        '''
-        if xyz is None:
-            xyz = 'xyz'
-        scale = (131, 65.5, 32.8, 16.4)
-        raw = self.get_gyro_raw()
-        gxyz = {'x': unp('>h', raw[0:2])[0]/scale[self._gr],
-                'y': unp('>h', raw[2:4])[0]/scale[self._gr],
-                'z': unp('>h', raw[4:6])[0]/scale[self._gr]}
-
-        gout = []
-        for char in xyz:
-            gout.append(gxyz[char])
-        return gout
-
-    # get raw mag
-    def get_mag_raw(self):
-        '''
-        Returns the mag on xyz in bytes.
-        '''
-        try:
-            if not self.mag_ready: # Blocking read, trigger mag and wait
-                self._write(0x01, 0x0A, self.mag_addr)
-                while self._read(1, 0x02, self.mag_addr) != b'\x01':
-                    pass
-            mxyz = self._read(6, 0x03, self.mag_addr)
-            self.mag_ready = False
-        except OSError:
-            mxyz = b'\x00\x00\x00\x00\x00\x00'
-        return mxyz
-
-    def get_mag_status(self):
-        '''
-        Support for nonblocking magnetometer reads. Returns a function instance.
-        The first call to a function instance initiates the hardware and returns None.
-        Subsequent calls test the mag status: not ready None, ready 1, error 2.
-        '''
-        init = True
-        def make_magread():
-            nonlocal init
-            try:
-                if init:
-                    self._write(0x01, 0x0A, self.mag_addr)
-                    init = False
-                    return None
-                #test the device
-                if self._read(1, 0x02, self.mag_addr) == b'\x01':
-                    self.mag_ready = True # Stop get_mag_raw from re-initialising the hardware
-                    return 1
-                return None # Not yet ready
-            except OSError:
-                return 2
-        return make_magread
-
-    def _get_mag_corrections(self):
+    def  _magsetup(self):
         '''
         Read magnetometer correction values from ROM. Perform the maths as decribed
         on page 59 of register map and store the results.
         '''
-        self._write(0x0F, 0x0A, self.mag_addr)
-        data = self._read(3, 0x10, self.mag_addr)
-        x = (0.5*(data[0] -128))/128 + 1
-        y = (0.5*(data[1] -128))/128 + 1
-        z = (0.5*(data[2] -128))/128 + 1
+        try:
+            self._write(0x0F, 0x0A, self._mag_addr)
+            data = self._read(self.buf3, 0x10, self._mag_addr)
+            self._write(0, 0x0A, self._mag_addr)        # Power down mode 
+        except OSError:
+            print(MPU9250._I2Cerror)
+            return (0, 0, 0)
+        x = (0.5*(self.buf3[0] -128))/128 + 1
+        y = (0.5*(self.buf3[1] -128))/128 + 1
+        z = (0.5*(self.buf3[2] -128))/128 + 1
         return (x, y, z)
-
-    # get mag
-    def get_mag(self, xyz=None):
-        '''
-        Returns the compass data on axis passed in arg in uT. Pass xyz or every 
-        subset of this string. None defaults to xyz.
-        '''
-        if xyz is None:
-            xyz = 'xyz'
-        scale = 3.33198
-        raw = self.get_mag_raw() # Note axis twiddling
-        mxyz = {'y': unp('<h', raw[0:2])[0]*self.mag_correction[1]/scale,
-                'x': unp('<h', raw[2:4])[0]*self.mag_correction[0]/scale,
-                'z': -unp('<h', raw[4:6])[0]*self.mag_correction[2]/scale}
-
-        mout = []
-        for char in xyz:
-            mout.append(mxyz[char])
-        return mout
 
     def get_mag_irq(self): # Uncorrected values because floating point uses heap
         if not self.mag_triggered:
-            self._mpu_i2c.mem_write(1, self.mag_addr, 0x0A, timeout=self.timeout)
-#            self._write(0x01, 0x0A, self.mag_addr)
+            self._write(1, 0x0A, self._mag_addr)
             self.mag_triggered = True
-        self._read1(0x02, self.mag_addr)
+        self._read(self.buf1, 0x02, self._mag_addr)
         if self.buf1[0] == 1:
-            self._read6(0x03, self.mag_addr) # Note axis twiddling
-            self.imag[1] = bytes_toint(self.buf6[1], self.buf6[0])
-            self.imag[0] = bytes_toint(self.buf6[3], self.buf6[2])
-            self.imag[2] = -bytes_toint(self.buf6[5], self.buf6[4])
+            self._read(self.buf6, 0x03, self._mag_addr) # Note axis twiddling
+            self._mag._ivector[1] = bytes_toint(self.buf6[1], self.buf6[0])
+            self._mag._ivector[0] = bytes_toint(self.buf6[3], self.buf6[2])
+            self._mag._ivector[2] = -bytes_toint(self.buf6[5], self.buf6[4])
             self.mag_triggered = False
