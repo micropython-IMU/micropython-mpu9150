@@ -8,7 +8,7 @@ import pyb
 
 def testfunc(a):
     start = pyb.micros()
-    while a.mag_status() is None:
+    while not a.mag_ready:
         pass
     dt = pyb.elapsed_micros(start)
     print("Wait time = {:5.2f}mS".format(dt/1000))
@@ -17,7 +17,7 @@ def testfunc(a):
     dt = pyb.elapsed_micros(start)
     print("Time to get = {:5.2f}mS".format(dt/1000))
     print("x = {:5.3f} y = {:5.3f} z = {:5.3f}".format(xyz[0], xyz[1], xyz[2]))
-    print("Mag status should be not ready (None): ", a.mag_status())
+    print("Mag status should be not ready (False): ", a.mag_ready)
     print("Correction factors: x = {:5.3f} y = {:5.3f} z = {:5.3f}".format(
         a.mag_correction[0],
         a.mag_correction[1],
