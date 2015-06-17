@@ -303,7 +303,7 @@ coordinates.
 
 # Demo of calibration
 
-´´python
+```python
 >>> from  mpu9250 import MPU9250
 >>> a = MPU9250('x')
 >>> a.mag.cal
@@ -314,4 +314,4 @@ coordinates.
 >>> a.mag.cal
 (35.30567, 18.92022, -9.428905)
 >>>
-´´
+´´´
