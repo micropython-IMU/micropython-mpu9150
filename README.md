@@ -1,3 +1,7 @@
+# Decapricated!!!
+# Use https://github.com/micropython-IMU/micropython-mpu9250 instead
+# It provides support for both the mpu9250 and the mpu 9150
+
 # Module mpu9150
 
 Note to existing users: as of 16th June 2015 the interface to this driver has changed.
